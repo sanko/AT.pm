@@ -551,7 +551,7 @@ At - The AT Protocol for Social Networking
         'com.atproto.repo.createRecord' => {
             repo       => $at->did,
             collection => 'app.bsky.feed.post',
-            record     => { '$type' => 'app.bsky.feed.post', text => 'Hello world! I posted this via the API.', createdAt => $at->now->as_string }
+            record     => { '$type' => 'app.bsky.feed.post', text => 'Hello world! I posted this via the API.', createdAt => $at->now }
         }
     );
 
