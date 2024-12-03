@@ -191,8 +191,6 @@ Exception handling is carried out by returning [At::Error](https://metacpan.org/
 
 [Bluesky](https://metacpan.org/pod/Bluesky) - Bluesky client library
 
-[App::bsky](https://metacpan.org/pod/App%3A%3Absky) - Bluesky client on the command line
-
 [https://docs.bsky.app/docs/api/](https://docs.bsky.app/docs/api/)
 
 # LICENSE

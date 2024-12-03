@@ -109,7 +109,7 @@
    "provides" : {
       "At" : {
          "file" : "lib/At.pm",
-         "version" : "0.19"
+         "version" : "0.20"
       },
       "At::Error" : {
          "file" : "lib/At/Error.pm",
@@ -153,7 +153,7 @@
          "web" : "https://github.com/sanko/At.pm"
       }
    },
-   "version" : "0.19",
+   "version" : "0.20",
    "x_contributors" : [
       "@wwwjim <send@jimmy.email>",
       "Akiomi Kamakura <akiomik@gmail.com>",

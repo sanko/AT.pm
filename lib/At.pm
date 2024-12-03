@@ -1,4 +1,6 @@
-package At 0.19 {
+package At 0.20 {
+
+    # XXX TODO: DO NOT MAKE AUTH TOKEN UNIVERSAL! Make them per-host/service!!!!!
     use v5.40;
     use Carp qw[];
     no warnings 'experimental::class', 'experimental::builtin', 'experimental::for_list';    # Be quiet.
@@ -109,45 +111,47 @@ package At 0.19 {
         }
 
         method get( $fqdn, $args = () ) {
-            my @namespace = split /\./, $fqdn;
-            my $lexicon   = $self->_locate_lexicon($fqdn);
-
-            #~ use Data::Dump;
-            #~ ddx $lexicon;
-            $self->_ratecheck('global');
+            my ( $lexicon, $rate_category, $endpoint );
+            if ( $fqdn !~ m[^https?://] ) {
+                my @namespace = split /\./, $fqdn;
+                $lexicon       = $self->_locate_lexicon($fqdn);
+                $rate_category = 'global';
+                $self->_ratecheck($rate_category);
+                $endpoint = $fqdn;
+                $fqdn     = sprintf '%s/xrpc/%s', $self->service, $fqdn;
+            }
 
             # ddx $schema;
-            my ( $content, $headers ) = $http->get( sprintf( '%s/xrpc/%s', $self->service, $fqdn ), defined $args ? { content => $args } : () );
-
-            #~ use Data::Dump;
-            #~ ddx $content;
-            #~ https://docs.bsky.app/docs/advanced-guides/rate-limits
-            $self->ratelimit_( { map { $_ => $headers->{ 'ratelimit-' . $_ } } qw[limit remaining reset] }, 'global' );
-            $self->_ratecheck('global');
-            if ( $lexicon && !builtin::blessed $content ) {
-                $content = $self->_coerce( $fqdn, $lexicon->{output}{schema}, $content );
+            my ( $content, $headers ) = $http->get( $fqdn, defined $args ? { content => $args } : () );
+            if ( defined $rate_category ) {
+                $self->ratelimit_( { map { $_ => $headers->{ 'ratelimit-' . $_ } } qw[limit remaining reset] }, 'global' );
+                $self->_ratecheck($rate_category);
+            }
+            if ( defined $lexicon && !builtin::blessed $content ) {
+                $content = $self->_coerce( $endpoint, $lexicon->{output}{schema}, $content );
             }
             wantarray ? ( $content, $headers ) : $content;
         }
 
         method post( $fqdn, $args = () ) {
-            my @namespace = split /\./, $fqdn;
-            my $lexicon   = $self->_locate_lexicon($fqdn);
-            my $rate_category
-                = $namespace[-1] =~ m[^(updateHandle|createAccount|createSession|deleteAccount|resetPassword)$] ? $namespace[-1] : 'global';
-            my $_rate_meta = $rate_category eq 'createSession' ? $args->{identifier} : $rate_category eq 'updateHandle' ? $args->{did} : ();
-            $self->_ratecheck( $rate_category, $_rate_meta );
-            my ( $content, $headers ) = $http->post( sprintf( '%s/xrpc/%s', $self->service, $fqdn ),
-                defined $args ? defined $args->{content} ? $args : { content => $args } : () );
-
-            #~ use Data::Dump;
-            #~ ddx $headers;
-            #~ ddx $content;
-            #~ https://docs.bsky.app/docs/advanced-guides/rate-limits
-            $self->ratelimit_( { map { $_ => $headers->{ 'ratelimit-' . $_ } } qw[limit remaining reset] }, $rate_category, $_rate_meta );
-            $self->_ratecheck( $rate_category, $_rate_meta );
-            if ( $lexicon && !builtin::blessed $content ) {
-                $content = $self->_coerce( $fqdn, $lexicon->{output}{schema}, $content );
+            my ( $lexicon, $rate_category, $rate_meta, $endpoint );
+            if ( $fqdn !~ m[^https?://] ) {
+                my @namespace = split /\./, $fqdn;
+                $lexicon = $self->_locate_lexicon($fqdn);
+                $rate_category
+                    = $namespace[-1] =~ m[^(updateHandle|createAccount|createSession|deleteAccount|resetPassword)$] ? $namespace[-1] : 'global';
+                $rate_meta = $rate_category eq 'createSession' ? $args->{identifier} : $rate_category eq 'updateHandle' ? $args->{did} : ();
+                $self->_ratecheck( $rate_category, $rate_meta );
+                $endpoint = $fqdn;
+                $fqdn     = sprintf '%s/xrpc/%s', $self->service, $fqdn;
+            }
+            my ( $content, $headers ) = $http->post( $fqdn, defined $args ? defined $args->{content} ? $args : { content => $args } : () );
+            if ( defined $rate_category ) {
+                $self->ratelimit_( { map { $_ => $headers->{ 'ratelimit-' . $_ } } qw[limit remaining reset] }, $rate_category, $rate_meta );
+                $self->_ratecheck( $rate_category, $rate_meta );
+            }
+            if ( defined $lexicon && !builtin::blessed $content ) {
+                $content = $self->_coerce( $endpoint, $lexicon->{output}{schema}, $content );
             }
             return wantarray ? ( $content, $headers ) : $content;
         }
@@ -402,7 +406,9 @@ package At 0.19 {
             #~ warn $url . ( defined $req->{content} && keys %{ $req->{content} } ? '?' . _build_query_string( $req->{content} ) : '' );
             #~ ddx $res;
             $res->{content} = decode_json $res->{content} if $res->{content} && $res->{headers}{'content-type'} =~ m[application/json];
-            $res->{content} = At::Error->new( message => $res->{content}{message}, fatal => 1 ) unless $res->{success};
+            $res->{content}
+                = At::Error->new( message => $res->{content}{message} // $res->{content} // $res->{reason} // 'Unknown Error', fatal => 1 )
+                unless $res->{success};
             wantarray ? ( $res->{content}, $res->{headers} ) : $res->{content};
         }
 
@@ -419,7 +425,9 @@ package At 0.19 {
                 }
             );
             $res->{content} = decode_json $res->{content} if $res->{content} && $res->{headers}{'content-type'} =~ m[application/json];
-            $res->{content} = At::Error->new( message => $res->{content}{message}, fatal => 1 ) unless $res->{success};
+            $res->{content}
+                = At::Error->new( message => $res->{content}{message} // $res->{content} // $res->{reason} // 'Unknown Error', fatal => 1 )
+                unless $res->{success};
             wantarray ? ( $res->{content}, $res->{headers} ) : $res->{content};
         }
         method websocket ( $url, $req = () ) {...}
@@ -446,8 +454,8 @@ package At 0.19 {
         method get ( $url, $req = () ) {
             my $res = $agent->get(
                 $url,
-                defined $auth           ? { Authorization => $auth, defined $req->{headers} ? %{ $req->{headers} } : () } : (),
-                defined $req->{content} ? ( form => $req->{content} )                                                     : ()
+                { defined $req->{headers} ? %{ $req->{headers} } : () },
+                defined $req->{content} ? ( form => $req->{content} ) : ()
             );
             $res = $res->result;
 
@@ -465,7 +473,9 @@ package At 0.19 {
             #~ warn $url;
             my $res = $agent->post(
                 $url,
-                defined $auth ? { Authorization => $auth, defined $req->{headers} ? %{ $req->{headers} } : () } : (),
+
+                #~ defined $auth ? { Authorization => $auth,
+                { defined $req->{headers} ? %{ $req->{headers} } : () },
                 defined $req->{content} ? ref $req->{content} ? ( json => $req->{content} ) : $req->{content} : ()
             )->result;
 
@@ -531,6 +541,12 @@ package At 0.19 {
 
         method _set_bearer_token ($token) {
             $auth = $token;
+            $agent->on(
+                start => sub {
+                    my ( $ua, $tx ) = @_;
+                    $tx->req->headers->authorization($token);
+                }
+            );
         }
     }
 };
@@ -744,8 +760,6 @@ Exception handling is carried out by returning L<At::Error> objects which have u
 =head1 See Also
 
 L<Bluesky> - Bluesky client library
-
-L<App::bsky> - Bluesky client on the command line
 
 L<https://docs.bsky.app/docs/api/>
 

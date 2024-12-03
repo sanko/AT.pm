@@ -3,6 +3,7 @@ Revision history for Perl extension At.pm
 [Unreleased]
 
     - Minor docs update
+    - Allow FQDN to be passed through to UA (ignores rate limits)
 
 0.19 2024-12-01T00:29:53Z
 
