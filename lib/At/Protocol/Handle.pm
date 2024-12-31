@@ -124,10 +124,10 @@ package At::Protocol::Handle 1.0 {
     }
 
     # All fatal errors
-    register 'InvalidHandleError',     (), 1;
-    register 'ReservedHandleError',    (), 1;
-    register 'UnsupportedDomainError', (), 1;
-    register 'DisallowedDomainError',  (), 1;
+    register 'InvalidHandleError',     (), 0;
+    register 'ReservedHandleError',    (), 0;
+    register 'UnsupportedDomainError', (), 0;
+    register 'DisallowedDomainError',  (), 0;
 };
 1;
 __END__
